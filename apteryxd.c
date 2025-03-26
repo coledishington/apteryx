@@ -2296,8 +2296,20 @@ handle_timestamp (rpc_message msg)
         }
         else
         {
-            call_refreshers (path, false);
-            value = db_timestamp (path);
+            char *plain;
+
+            if (g_strcmp0 (&path[strlen(path) - 2], "/*") == 0)
+            {
+                plain = g_strndup (path, strlen(path) - 2);
+                refreshers_traverse (plain, cb_refresh, true);
+            }
+            else
+            {
+                plain = g_strdup(path);
+                call_refreshers (path, false);
+            }
+            value = db_timestamp (plain);
+            free (plain);
         }
     }
 
