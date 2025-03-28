@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -3927,32 +3928,60 @@ test_provide_different_process ()
 {
     const char *path = TEST_PATH"/interfaces/eth0/state";
     const char *value = NULL;
-    int pid;
+    int pipefds[2];
     int status;
+    pid_t pid;
 
     apteryx_shutdown ();
-    if ((pid = fork ()) == 0)
+    if (pipe (pipefds) != 0)
     {
+        CU_ASSERT (0);
+    }
+    else if ((pid = fork ()) == 0)
+    {
+        close (pipefds[0]);
         apteryx_init (apteryx_debug);
         CU_ASSERT (apteryx_provide (path, test_provide_callback_up));
         usleep (RPC_TIMEOUT_US);
         apteryx_unprovide (path, test_provide_callback_up);
         apteryx_shutdown ();
+        close (pipefds[1]);
         exit (0);
     }
     else if (pid > 0)
     {
+        struct pollfd pfd = {
+            .fd = pipefds[0],
+            .events = POLLIN,
+        };
+
+        close (pipefds[1]);
         apteryx_init (apteryx_debug);
         usleep (RPC_TIMEOUT_US / 2);
         CU_ASSERT ((value = apteryx_get (path)) != NULL);
         CU_ASSERT (value && strcmp (value, "up") == 0);
         if (value)
             free ((void *) value);
-        waitpid (pid, &status, 0);
-        CU_ASSERT (WEXITSTATUS (status) == 0);
+
+        poll (&pfd, (nfds_t)1, RPC_TIMEOUT_US);
+        waitpid (pid, &status, WNOHANG);
+        if (WIFEXITED (status))
+        {
+            CU_ASSERT (WEXITSTATUS (status) == 0);
+        }
+        else
+        {
+            kill (pid, SIGTERM);
+            usleep (RPC_TIMEOUT_US / 2);
+            waitpid (pid, &status, WNOHANG);
+            CU_ASSERT (0);
+        }
+        close (pipefds[0]);
     }
     else if (pid < 0)
     {
+        close (pipefds[0]);
+        close (pipefds[1]);
         CU_ASSERT (0);
     }
     CU_ASSERT (assert_apteryx_empty ());
