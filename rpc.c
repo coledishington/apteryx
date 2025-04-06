@@ -103,6 +103,8 @@ worker_func (struct rpc_work_s *work, sigset_t *sigmask)
 {
     sigset_t oldmask;
 
+    DEBUG("worker_func")
+
     /* Process callbacks using the worker sigmask */
     if (sigmask)
         pthread_sigmask (SIG_SETMASK, sigmask, &oldmask);
@@ -296,7 +298,7 @@ request_cb (rpc_socket sock, rpc_id id, void *buffer, size_t len)
     struct rpc_work_s *work;
     bool watch = false;
 
-    DEBUG ("RPC[%d]: received %zd bytes\n", sock->sock, len);
+    DEBUG ("RPC[%d]: received %zd bytes in request_cb\n", sock->sock, len);
 
     /* Get the rpc instance from the socket */
     rpc = (rpc_instance) rpc_socket_priv_get (sock);
@@ -342,6 +344,7 @@ request_cb (rpc_socket sock, rpc_id id, void *buffer, size_t len)
     /* Check if in polling mode first */
     if (rpc->queue)
     {
+        DEBUG("push work on async queue");
         uint8_t dummy = 0;
         g_async_queue_push (rpc->queue, (gpointer) work);
         if (write (rpc->pollfd[1], &dummy, 1) != 1)
@@ -352,18 +355,30 @@ request_cb (rpc_socket sock, rpc_id id, void *buffer, size_t len)
     /* Callbacks from local Apteryx threads */
     else if (watch || work->responded)
     {
+        DEBUG("Do local thread slow work");
         pthread_mutex_lock (&rpc->lock);
         submit_slow_work (rpc, work, 0);
         pthread_mutex_unlock (&rpc->lock);
     }
     else
     {
+        GError *error = NULL;
+
         if (!rpc->workers)
         {
             rpc->workers = g_thread_pool_new ((GFunc)worker_func, (gpointer)&rpc->worker_sigmask,
-                                              8, FALSE, NULL);
+                                              8, FALSE, &error);
+            DEBUG("Spawn workers thread pool %p: %s", rpc->workers, error ? error->message : "[NO ERROR]");
+            if (error) {
+                g_error_free (error);
+                error = NULL;
+            }
         }
-        g_thread_pool_push (rpc->workers, work, NULL);
+        DEBUG ("Pushed work on queue %d", g_thread_pool_push (rpc->workers, work, &error));
+        if (error) {
+            DEBUG ("%s", error->message);
+            g_error_free (error);
+        }
     }
 }
 
@@ -376,7 +391,7 @@ rpc_init (int timeout, bool reuse_sock, rpc_msg_handler handler)
     rpc_instance rpc = (rpc_instance) g_malloc0 (sizeof(*rpc));
 
     /* Create the server */
-    rpc_service server = rpc_service_init (request_cb, rpc);
+    rpc_service server = rpc_service_init (request_cb, rpc); // got a mutex
     if (server == NULL)
     {
         ERROR ("RPC: Failed to initialise server\n");

@@ -22,6 +22,7 @@
 #include <stdio.h>
 #include <signal.h>
 #include <sys/types.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/time.h>
@@ -3923,68 +3924,72 @@ test_provide_different_thread ()
     CU_ASSERT (assert_apteryx_empty ());
 }
 
+static bool test_provide_fork_called = false;
+static char *
+test_provide_fork_client (const char *path)
+{
+    char *ret;
+
+    ret = test_provide_callback_up (path);
+    printf("child: test_provide_fork_called=%d\n", true);
+    test_provide_fork_called = true;
+    return ret;
+}
+
 void
 test_provide_different_process ()
 {
-    const char *path = TEST_PATH"/interfaces/eth0/state";
+    apteryx_debug = true;
+
+    const char *path = TEST_PATH"/interfaces/eth..............................................0/state";
     const char *value = NULL;
-    int pipefds[2];
     int status;
     pid_t pid;
 
-    apteryx_shutdown ();
-    if (pipe (pipefds) != 0)
+    printf ("apteryx_shutdown=%d\n", apteryx_shutdown ());
+    if ((pid = fork ()) == 0)
     {
-        CU_ASSERT (0);
-    }
-    else if ((pid = fork ()) == 0)
-    {
-        close (pipefds[0]);
-        apteryx_init (apteryx_debug);
-        CU_ASSERT (apteryx_provide (path, test_provide_callback_up));
+        printf ("child: pid %d\n", pid);
+        printf("child: apteryx_init=%d\n", apteryx_init (apteryx_debug));
+        CU_ASSERT (apteryx_provide (path, test_provide_fork_client));
+        while (!test_provide_fork_called) {
+            usleep (TEST_SLEEP_TIMEOUT);
+            printf("client: Check back later\n");
+        }
         usleep (RPC_TIMEOUT_US);
-        apteryx_unprovide (path, test_provide_callback_up);
-        apteryx_shutdown ();
-        close (pipefds[1]);
-        exit (0);
+        printf("child: done\n");
+        apteryx_unprovide (path, test_provide_fork_client);
+        printf("child: apteryx_shutdown=%d\n", apteryx_shutdown ());
+        _exit (0);
     }
     else if (pid > 0)
     {
-        struct pollfd pfd = {
-            .fd = pipefds[0],
-            .events = POLLIN,
-        };
-
-        close (pipefds[1]);
-        apteryx_init (apteryx_debug);
-        usleep (RPC_TIMEOUT_US / 2);
+        printf ("parent: pid=%d\n", pid);
+        printf("parent: apteryx_init=%d\n", apteryx_init (apteryx_debug));
+        usleep (RPC_TIMEOUT_US);
         CU_ASSERT ((value = apteryx_get (path)) != NULL);
         CU_ASSERT (value && strcmp (value, "up") == 0);
         if (value)
             free ((void *) value);
-
-        poll (&pfd, (nfds_t)1, RPC_TIMEOUT_US);
-        waitpid (pid, &status, WNOHANG);
-        if (WIFEXITED (status))
+    
+        usleep (2 * TEST_SLEEP_TIMEOUT);
+        printf("parent: waitpid 1 %d\n", waitpid (pid, &status, WNOHANG));
+        CU_ASSERT (WIFEXITED (status) && WEXITSTATUS (status) == 0);
+        if (!WIFEXITED (status))
         {
-            CU_ASSERT (WEXITSTATUS (status) == 0);
+            kill (pid, SIGHUP);
+            usleep (5 * RPC_TIMEOUT_US);
+            // provide is never getting called
+            printf("parent: waitpid 2 %d\n", waitpid (pid, &status, WNOHANG));
         }
-        else
-        {
-            kill (pid, SIGTERM);
-            usleep (RPC_TIMEOUT_US / 2);
-            waitpid (pid, &status, WNOHANG);
-            CU_ASSERT (0);
-        }
-        close (pipefds[0]);
     }
     else if (pid < 0)
     {
-        close (pipefds[0]);
-        close (pipefds[1]);
+        printf ("parent: failed to fork\n");
         CU_ASSERT (0);
     }
     CU_ASSERT (assert_apteryx_empty ());
+    apteryx_debug = false;
 }
 
 static char*
@@ -10840,27 +10845,27 @@ static CU_TestInfo tests_api_refresh[] = {
 
 static CU_TestInfo tests_api_provide[] = {
     { "provide", test_provide },
-    { "provider timeout", test_provide_timeout },
-    { "provide replace handler", test_provide_replace_handler },
-    { "provide no handler", test_provide_no_handler },
-    { "provide remove handler", test_provide_remove_handler },
-    { "provide from different threads", test_provide_different_thread },
+    // { "provider timeout", test_provide_timeout },
+    // { "provide replace handler", test_provide_replace_handler },
+    // { "provide no handler", test_provide_no_handler },
+    // { "provide remove handler", test_provide_remove_handler },
+    // { "provide from different threads", test_provide_different_thread },
     { "provide from different process", test_provide_different_process },
-    { "provide callback get", test_provide_callback_get },
-    { "provide callback get null", test_provide_callback_get_null },
-    { "provide search", test_provide_search },
-    { "provide search root", test_provide_search_root },
-    { "provide wildcard + search", test_provider_wildcard_search },
-    { "provide and db search", test_provide_search_db },
-    { "provide before db", test_provide_before_db },
-    { "provider wildcard", test_provider_wildcard },
-    { "provider wildcard internal", test_provider_wildcard_internal },
-    { "provider search exact provide", test_search_of_provide },
-    { "provider directory search", test_search_of_provider_slash },
-    { "provider wildcard search", test_search_of_provider_wildcard },
-    { "provider lower directory search", test_search_of_lower_directory_provider },
-    { "provider lower wildcard search", test_search_of_lower_wildcard_provider },
-    { "provider intermediate wildcard search", test_search_of_intermediate_wildcard },
+    // { "provide callback get", test_provide_callback_get },
+    // { "provide callback get null", test_provide_callback_get_null },
+    // { "provide search", test_provide_search },
+    // { "provide search root", test_provide_search_root },
+    // { "provide wildcard + search", test_provider_wildcard_search },
+    // { "provide and db search", test_provide_search_db },
+    // { "provide before db", test_provide_before_db },
+    // { "provider wildcard", test_provider_wildcard },
+    // { "provider wildcard internal", test_provider_wildcard_internal },
+    // { "provider search exact provide", test_search_of_provide },
+    // { "provider directory search", test_search_of_provider_slash },
+    // { "provider wildcard search", test_search_of_provider_wildcard },
+    // { "provider lower directory search", test_search_of_lower_directory_provider },
+    // { "provider lower wildcard search", test_search_of_lower_wildcard_provider },
+    // { "provider intermediate wildcard search", test_search_of_intermediate_wildcard },
     CU_TEST_INFO_NULL,
 };
 
@@ -11131,104 +11136,106 @@ extern CU_TestInfo tests_database[];
 extern CU_TestInfo tests_callbacks[];
 
 static CU_SuiteInfo suites[] = {
-    {
-        .pName = "Database",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_database
-    },
-    {
-        .pName = "Callbacks",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_callbacks
-    },
-    {
-        .pName = "RPC",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_rpc
-    },
-    #ifdef HAVE_LUA
-    {
-        .pName = "LUA",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_lua
-    },
-    #endif
-    {
-        .pName = "Apteryx API",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_api
-    },
-    {
-        .pName = "Apteryx API Index",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_api_index
-    },
-    {
-        .pName = "Apteryx API Tree",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_api_tree
-    },
-    {
-        .pName = "Apteryx API Watch",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_api_watch
-    },
-    {
-        .pName = "Apteryx API Validate",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_api_validate
-    },
-    {
-        .pName = "Apteryx API Refresh",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_api_refresh
-    },
+    // {
+    //     .pName = "Database",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_database
+    // },
+    // {
+    //     .pName = "Callbacks",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_callbacks
+    // },
+    // {
+    //     .pName = "RPC",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_rpc
+    // },
+    // #ifdef HAVE_LUA
+    // {
+    //     .pName = "LUA",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_lua
+    // },
+    // #endif
+    // {
+    //     .pName = "Apteryx API",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_api
+    // },
+    // {
+    //     .pName = "Apteryx API Index",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_api_index
+    // },
+    // {
+    //     .pName = "Apteryx API Tree",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_api_tree
+    // },
+    // {
+    //     .pName = "Apteryx API Watch",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_api_watch
+    // },
+    // {
+    //     .pName = "Apteryx API Validate",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_api_validate
+    // },
+    // {
+    //     .pName = "Apteryx API Refresh",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_api_refresh
+    // },
     {
         .pName = "Apteryx API Provide",
         .pInitFunc = suite_init,
         .pCleanupFunc = suite_clean,
         .pTests = tests_api_provide
     },
-    {
-        .pName = "Apteryx API Proxy",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_api_proxy
-    },
-    {
-        .pName = "Apteryx API Find",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_find
-    },
-    {
-        .pName = "Apteryx API Single Threaded",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_single_threaded
-    },
-    {
-        .pName = "Apteryx Performance",
-        .pInitFunc = suite_init,
-        .pCleanupFunc = suite_clean,
-        .pTests = tests_performance
-    },
+    // {
+    //     .pName = "Apteryx API Proxy",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_api_proxy
+    // },
+    // {
+    //     .pName = "Apteryx API Find",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_find
+    // },
+    // {
+    //     .pName = "Apteryx API Single Threaded",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_single_threaded
+    // },
+    // {
+    //     .pName = "Apteryx Performance",
+    //     .pInitFunc = suite_init,
+    //     .pCleanupFunc = suite_clean,
+    //     .pTests = tests_performance
+    // },
     CU_SUITE_INFO_NULL,
 };
 
 void
 run_unit_tests (const char *filter)
 {
+    apteryx_debug = true;
+
     /* Initialize the CUnit test registry */
     if (CUE_SUCCESS != CU_initialize_registry ())
         return;

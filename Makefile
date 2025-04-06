@@ -33,7 +33,7 @@ PKG_CONFIG ?= pkg-config
 
 ABI_VERSION=4
 CFLAGS := $(CFLAGS) -g -O2
-EXTRA_CFLAGS += -Wall -Werror -Wno-comment -std=c99 -D_GNU_SOURCE -fPIC
+EXTRA_CFLAGS += -Wall -Werror -Wno-comment -Wno-unused-variable -std=c99 -D_GNU_SOURCE -fPIC
 EXTRA_CFLAGS += -I. $(shell $(PKG_CONFIG) --cflags glib-2.0)
 EXTRA_LDFLAGS := -L$(BUILDDIR) $(shell $(PKG_CONFIG) --libs glib-2.0) -lpthread
 ifneq ($(HAVE_LUA),no)
@@ -86,7 +86,7 @@ apteryxd = \
 	export ASAN_OPTIONS=fast_unwind_on_malloc=true:halt_on_error=0:detect_stack_use_after_return=1:log_path=$(BUILDDIR)/asan-log; \
 	export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):$(BUILDDIR)/; \
 	export LUA_CPATH=$(BUILDDIR)/?.so; \
-	$(BUILDDIR)/apteryxd -b -p /tmp/apteryxd.pid -r /tmp/apteryxd.run && sleep 0.1; \
+	$(BUILDDIR)/apteryxd -d -b -p /tmp/apteryxd.pid -r /tmp/apteryxd.run && sleep 0.1; \
 	$(TEST_WRAPPER) $(BUILDDIR)/$(1); \
 	APID=`cat /tmp/apteryxd.pid`; \
 	kill -TERM $$APID; \

@@ -454,6 +454,7 @@ msg_handler (rpc_message msg)
     APTERYX_MODE mode = rpc_msg_decode_uint8 (msg);
     /* If the client has indicated they are done then
       don't process any more messages */
+    DEBUG ("msg_handler mode=%u\n", mode);
     if (ref_count <= 0)
     {
         DEBUG ("MSG: Message after shutdown (%d)\n", mode);

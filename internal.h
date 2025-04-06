@@ -86,7 +86,8 @@ getns (void)
     { \
         syslog (LOG_DEBUG, fmt, ## args); \
         printf ("[%"PRIu64":%d] ", get_time_us (), getpid ()); \
-        printf (fmt, ## args); \
+        printf ("(%s, %d) ", __FUNCTION__, __LINE__); \
+        printf (""fmt, ## args); \
     }
 
 #define ERROR(fmt, args...) \
@@ -95,6 +96,7 @@ getns (void)
         if (apteryx_debug) \
         { \
             fprintf (stderr, "[%"PRIu64":%d] ", get_time_us (), getpid ()); \
+            fprintf (stderr, "(%s, %d) ", __FUNCTION__, __LINE__); \
             fprintf (stderr, "ERROR: "); \
             fprintf (stderr, fmt, ## args); \
         } \
